@@ -13,12 +13,19 @@ next-env.d.ts
 .env
 .env.local
 .env.*.local
+credentials.json
+token.json
+*.pem
+*.key
+*.crt
+.npmrc
 
 # IDE
-.vscode/
+.vscode/*.log
 .idea/
 *.swp
 .DS_Store
+Thumbs.db
 
 # Testing
 coverage/
