@@ -1,0 +1,35 @@
+# Node
+node_modules/
+*.log
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+build/
+next-env.d.ts
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Testing
+coverage/
+
+# Drizzle / DB
+*.sqlite
+.drizzle/
+
+# Vercel
+.vercel
+
+# Misc
+.tmp/
+*.tsbuildinfo
