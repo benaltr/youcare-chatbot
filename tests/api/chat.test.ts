@@ -49,7 +49,7 @@ describe("POST /api/chat", () => {
     );
     expect(res.status).toBe(200);
     expect(res.body).not.toBeNull();
-    const reader = res.body!.getReader();
+    const reader = res.body?.getReader();
     let chunks = "";
     const decoder = new TextDecoder();
     while (true) {

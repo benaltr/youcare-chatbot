@@ -39,8 +39,8 @@ export default function WidgetPage() {
           ) : (
             messages.map((m) => (
               <MessageBubble key={m.id} role={m.role}>
-                {m.parts.map((part, i) =>
-                  part.type === "text" ? <span key={i}>{part.text}</span> : null,
+                {m.parts.map((part) =>
+                  part.type === "text" ? <span key={`${m.id}-${part.text.slice(0, 20)}`}>{part.text}</span> : null,
                 )}
               </MessageBubble>
             ))
