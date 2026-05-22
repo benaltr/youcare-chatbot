@@ -62,7 +62,11 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Convert UI messages to model messages
-    const messages = await convertToModelMessages(uiMessages as UIMessage[]);
+    // Build messages array manually
+    const messages = uiMessages.map((msg: Record<string, unknown>) => ({
+      role: msg.role as string,
+      content: msg.content as string,
+    }));
 
     // Extract last user message for language detection
     const lastMessage = uiMessages[uiMessages.length - 1] as Record<string, unknown> | undefined;
