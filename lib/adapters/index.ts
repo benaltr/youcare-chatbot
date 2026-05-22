@@ -37,7 +37,7 @@ export async function getCalendarAdapter(tenantId: string): Promise<CalendarAdap
   const tenantConfig = tenantConfigRows[0] || {};
 
   // Instantiate adapter based on type
-  const credentials = adapterConfig.credentials as GoogleCalendarCredentials;
+  const credentials = adapterConfig.credentials as unknown as GoogleCalendarCredentials;
 
   switch (adapterConfig.adapter) {
     case "google_calendar":
