@@ -9,7 +9,7 @@ export const maxDuration = 60;
 
 const RequestSchema = z.object({
   tenantSlug: z.string().min(1),
-  messages: z.array(z.record(z.any())).min(1),
+  messages: z.array(z.record(z.string(), z.any())).min(1),
   channelThreadId: z.string().optional(),
   phone: z.string().optional(),
 });
