@@ -9,14 +9,12 @@ export const maxDuration = 60;
 
 const RequestSchema = z.object({
   tenantSlug: z.string().min(1),
-  messages: z.array(z.any()).min(1),
+  messages: z.array(z.record(z.any())).min(1),
   channelThreadId: z.string().optional(),
   phone: z.string().optional(),
 });
 
 function calculateCost(inputTokens: number, outputTokens: number): string {
-  // Claude Sonnet 4.6 pricing (approximately)
-  // Input: $3 per 1M tokens, Output: $15 per 1M tokens
   const inputCost = (3 / 1_000_000) * inputTokens;
   const outputCost = (15 / 1_000_000) * outputTokens;
   const total = inputCost + outputCost;
@@ -24,34 +22,24 @@ function calculateCost(inputTokens: number, outputTokens: number): string {
 }
 
 function detectLanguage(text: string): string {
-  // Simple heuristic: if text contains Hebrew characters, assume Hebrew
   const hebrewRange = /[֐-׿]/;
   return hebrewRange.test(text) ? "he" : "en";
 }
 
 export async function POST(req: Request): Promise<Response> {
-  let body: unknown;
   try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-      status: 400,
-      headers: { "content-type": "application/json" },
-    });
-  }
+    const body = await req.json();
 
-  const parsed = RequestSchema.safeParse(body);
-  if (!parsed.success) {
-    return new Response(
-      JSON.stringify({ error: "Invalid request", details: parsed.error.flatten() }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
-  }
+    const parsed = RequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: "Invalid request", details: parsed.error.flatten() }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
 
-  try {
     const { tenantSlug, messages: uiMessages, channelThreadId, phone } = parsed.data;
 
-    // Resolve tenant
     const tenant = await resolveTenantBySlug(tenantSlug);
     if (!tenant) {
       return new Response(JSON.stringify({ error: `Tenant not found: ${tenantSlug}` }), {
@@ -60,21 +48,10 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // Build messages array safely
-    const messages = Array.isArray(uiMessages)
-      ? uiMessages.map((msg: Record<string, unknown>) => ({
-          role: msg.role as string,
-          content: msg.content as string,
-        }))
-      : [];
-
-    // Extract last user message for language detection
-    const lastMessage =
-      Array.isArray(uiMessages) && uiMessages.length > 0
-        ? (uiMessages[uiMessages.length - 1] as Record<string, unknown>)
-        : undefined;
+    // Extract user text for language detection
+    const lastMessage = uiMessages?.[uiMessages.length - 1] || {};
     const userPhone = phone || "unknown";
-    const userText = (lastMessage?.content as string) || "";
+    const userText = String(lastMessage.content || "");
     const detectedLanguage = detectLanguage(userText);
 
     // Find or create customer
@@ -96,7 +73,6 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Find or create conversation
-    // Use provided channelThreadId or generate from phone
     const threadId = channelThreadId || `${tenant.id}-${userPhone}-web_widget`;
 
     let conversation = await db.query.conversations.findFirst({
@@ -123,12 +99,6 @@ export async function POST(req: Request): Promise<Response> {
       conversation = newConversations[0];
     }
 
-    // Call agent
-    const result = await runAgent({
-      tenantSlug: tenantSlug,
-      messages,
-    });
-
     // Save user message
     await db.insert(schema.messages).values({
       conversationId: conversation.id,
@@ -137,17 +107,20 @@ export async function POST(req: Request): Promise<Response> {
       createdAt: new Date(),
     });
 
-    // Collect response and save it
+    // Call agent - convert messages to proper format
+    const result = await runAgent({
+      tenantSlug,
+      messages: uiMessages.map(msg => ({
+        role: String(msg.role) as "user" | "assistant",
+        content: String(msg.content),
+      })),
+    });
+
+    // Get streaming response
     const uiStream = result.toUIMessageStreamResponse();
 
-    // We need to capture the response text. Since streamText returns a stream,
-    // we'll save the message after we've collected the full response.
-    // For now, we'll create a wrapper that captures the response.
-
-    // Get the full text from the stream by consuming it
+    // Collect response text
     let fullResponseText = "";
-
-    // Clone the response so we can read it
     const clonedResponse = uiStream.clone();
     const reader = clonedResponse.body?.getReader();
 
@@ -160,7 +133,6 @@ export async function POST(req: Request): Promise<Response> {
         done = streamDone;
         if (value) {
           const text = decoder.decode(value, { stream: !done });
-          // Parse SSE format: "data: {...}\n\n"
           const lines = text.split("\n");
           for (const line of lines) {
             if (line.startsWith("data: ")) {
@@ -170,7 +142,7 @@ export async function POST(req: Request): Promise<Response> {
                   fullResponseText += json.delta;
                 }
               } catch {
-                // Skip parsing errors on non-JSON lines
+                // Skip parsing errors
               }
             }
           }
@@ -178,7 +150,7 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    // Save assistant message with collected response
+    // Save assistant message
     const usage = await result.usage;
     const costUsd = calculateCost(usage?.inputTokens || 0, usage?.outputTokens || 0);
 
@@ -193,20 +165,15 @@ export async function POST(req: Request): Promise<Response> {
       createdAt: new Date(),
     });
 
-    // Return the original stream response
     return uiStream;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    if (message.toLowerCase().includes("tenant not found")) {
-      return new Response(JSON.stringify({ error: message }), {
-        status: 404,
-        headers: { "content-type": "application/json" },
-      });
-    }
-    console.error("Chat API error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", details: message }), {
-      status: 500,
-      headers: { "content-type": "application/json" },
-    });
+  } catch (err: any) {
+    console.error("Chat API error:", err?.message || err);
+    return new Response(
+      JSON.stringify({
+        error: "Internal error",
+        details: err?.message || "Unknown error",
+      }),
+      { status: 500, headers: { "content-type": "application/json" } }
+    );
   }
 }
