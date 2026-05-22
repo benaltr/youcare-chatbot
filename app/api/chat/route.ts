@@ -172,7 +172,7 @@ export async function POST(req: Request): Promise<Response> {
     }
 
     // Save assistant message with collected response
-    const usage = result.usage;
+    const usage = await result.usage;
     const costUsd = calculateCost(usage?.inputTokens || 0, usage?.outputTokens || 0);
 
     await db.insert(schema.messages).values({
