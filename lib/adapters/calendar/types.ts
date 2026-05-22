@@ -8,42 +8,77 @@ export interface AvailableSlot {
   end: Date;
 }
 
-export interface FindAvailableSlotsRequest {
-  startDate: Date;
-  endDate: Date;
+export interface FindAvailableSlotsOptions {
+  serviceId: string;
+  staffId?: string;
+  dateRange: { start: Date; end: Date };
   durationMinutes: number;
-  bufferMinutes: number;
-  staffEmail: string;
+  bufferMinutes?: number;
 }
 
 export interface FindAvailableSlotsResponse {
   success: boolean;
-  slots?: AvailableSlot[];
+  slots: Array<{ start: Date; end: Date }>;
   error?: string;
 }
 
-export interface CreateAppointmentRequest {
-  startTime: Date;
-  endTime: Date;
+export interface CreateAppointmentOptions {
+  customerId: string;
   customerName: string;
-  customerEmail: string;
+  customerEmail?: string;
+  serviceId: string;
   serviceName: string;
-  staffEmail: string;
+  staffId?: string;
+  staffName?: string;
+  startsAt: Date;
+  endsAt: Date;
+  notes?: string;
 }
 
 export interface CreateAppointmentResponse {
   success: boolean;
-  eventId?: string;
+  appointmentId: string;
+  calendarUrl?: string;
+  error?: string;
+}
+
+export interface CancelAppointmentOptions {
+  appointmentId: string;
+  reason?: string;
+}
+
+export interface CancelAppointmentResponse {
+  success: boolean;
+  error?: string;
+}
+
+export interface RescheduleAppointmentOptions {
+  appointmentId: string;
+  newStartsAt: Date;
+  newEndsAt: Date;
+}
+
+export interface RescheduleAppointmentResponse {
+  success: boolean;
+  appointmentId: string;
   error?: string;
 }
 
 export interface CalendarAdapter {
-  findAvailableSlots(request: FindAvailableSlotsRequest): Promise<FindAvailableSlotsResponse>;
-  createAppointment(request: CreateAppointmentRequest): Promise<CreateAppointmentResponse>;
+  findAvailableSlots(options: FindAvailableSlotsOptions): Promise<FindAvailableSlotsResponse>;
+
+  createAppointment(options: CreateAppointmentOptions): Promise<CreateAppointmentResponse>;
+
+  cancelAppointment(options: CancelAppointmentOptions): Promise<CancelAppointmentResponse>;
+
+  rescheduleAppointment(
+    options: RescheduleAppointmentOptions,
+  ): Promise<RescheduleAppointmentResponse>;
 }
 
 export interface GoogleCalendarCredentials {
   googleAccessToken: string;
   googleRefreshToken: string;
   googleAccessTokenExpiresAt: number;
+  googleCalendarId?: string;
 }

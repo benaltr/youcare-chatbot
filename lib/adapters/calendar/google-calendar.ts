@@ -2,18 +2,21 @@ import { and, eq } from "drizzle-orm";
 
 import { db, schema } from "@/lib/db";
 import type {
-  AvailableSlot,
   CalendarAdapter,
-  CreateAppointmentRequest,
+  CancelAppointmentOptions,
+  CancelAppointmentResponse,
+  CreateAppointmentOptions,
   CreateAppointmentResponse,
-  FindAvailableSlotsRequest,
+  FindAvailableSlotsOptions,
   FindAvailableSlotsResponse,
   GoogleCalendarCredentials,
+  RescheduleAppointmentOptions,
+  RescheduleAppointmentResponse,
 } from "./types";
 
 /**
  * Google Calendar adapter for clinic scheduling
- * Handles OAuth token refresh, slot availability, and appointment creation
+ * Handles OAuth token refresh, slot availability, and appointment creation/cancellation/rescheduling
  */
 export class GoogleCalendarAdapter implements CalendarAdapter {
   private tenantId: string;
@@ -25,17 +28,31 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 
   async findAvailableSlots(
-    request: FindAvailableSlotsRequest,
+    options: FindAvailableSlotsOptions,
   ): Promise<FindAvailableSlotsResponse> {
     try {
       await this.ensureValidToken();
 
+      // Get staff calendar ID or email
+      const calendarId = await this.getCalendarIdForStaff(options.staffId);
+      if (!calendarId) {
+        return {
+          success: false,
+          slots: [],
+          error: "Staff calendar not found",
+        };
+      }
+
+      // Get service duration and buffer
+      const serviceDuration = options.durationMinutes;
+      const bufferMinutes = options.bufferMinutes ?? 0;
+
       // Query Google Calendar API for events in the date range
-      const timeMin = request.startDate.toISOString();
-      const timeMax = request.endDate.toISOString();
+      const timeMin = options.dateRange.start.toISOString();
+      const timeMax = options.dateRange.end.toISOString();
 
       const url = new URL(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(request.staffEmail)}/events`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
       );
       url.searchParams.append("timeMin", timeMin);
       url.searchParams.append("timeMax", timeMax);
@@ -53,6 +70,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
         const error = await response.json();
         return {
           success: false,
+          slots: [],
           error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
         };
       }
@@ -62,11 +80,11 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 
       // Find available slots considering duration and buffer
       const slots = this.findSlotsBetweenEvents(
-        request.startDate,
-        request.endDate,
+        options.dateRange.start,
+        options.dateRange.end,
         existingEvents,
-        request.durationMinutes,
-        request.bufferMinutes,
+        serviceDuration,
+        bufferMinutes,
       );
 
       return {
@@ -77,31 +95,53 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       const message = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        slots: [],
         error: `Failed to find available slots: ${message}`,
       };
     }
   }
 
-  async createAppointment(request: CreateAppointmentRequest): Promise<CreateAppointmentResponse> {
+  async createAppointment(options: CreateAppointmentOptions): Promise<CreateAppointmentResponse> {
     try {
       await this.ensureValidToken();
 
+      // Get staff calendar ID or email
+      const calendarId = await this.getCalendarIdForStaff(options.staffId);
+      if (!calendarId) {
+        return {
+          success: false,
+          appointmentId: "",
+          error: "Staff calendar not found",
+        };
+      }
+
+      // Ensure we have customer email
+      const customerEmail =
+        options.customerEmail ?? (await this.getCustomerEmail(options.customerId));
+      if (!customerEmail) {
+        return {
+          success: false,
+          appointmentId: "",
+          error: "Customer email not found",
+        };
+      }
+
       const event = {
-        summary: `${request.serviceName} - ${request.customerName}`,
-        description: `Appointment booked via YouCare AI Chatbot`,
+        summary: `${options.serviceName} - ${options.customerName}`,
+        description: `Appointment booked via YouCare AI Chatbot${options.notes ? `\n\n${options.notes}` : ""}`,
         start: {
-          dateTime: request.startTime.toISOString(),
+          dateTime: options.startsAt.toISOString(),
           timeZone: "Asia/Jerusalem", // Default to Israel timezone
         },
         end: {
-          dateTime: request.endTime.toISOString(),
+          dateTime: options.endsAt.toISOString(),
           timeZone: "Asia/Jerusalem",
         },
-        attendees: [{ email: request.customerEmail }, { email: request.staffEmail }],
+        attendees: [{ email: customerEmail }, { email: calendarId }],
       };
 
       const response = await fetch(
-        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(request.staffEmail)}/events`,
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
         {
           method: "POST",
           headers: {
@@ -116,6 +156,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
         const error = await response.json();
         return {
           success: false,
+          appointmentId: "",
           error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
         };
       }
@@ -124,13 +165,114 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 
       return {
         success: true,
-        eventId: createdEvent.id,
+        appointmentId: createdEvent.id,
+        calendarUrl: createdEvent.htmlLink,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
         success: false,
+        appointmentId: "",
         error: `Failed to create appointment: ${message}`,
+      };
+    }
+  }
+
+  async cancelAppointment(options: CancelAppointmentOptions): Promise<CancelAppointmentResponse> {
+    try {
+      await this.ensureValidToken();
+
+      const calendarId = this.config.googleCalendarId;
+      if (!calendarId) {
+        return {
+          success: false,
+          error: "Google calendar ID not configured",
+        };
+      }
+
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(options.appointmentId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${this.config.googleAccessToken}`,
+          },
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        return {
+          success: false,
+          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+        };
+      }
+
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        error: `Failed to cancel appointment: ${message}`,
+      };
+    }
+  }
+
+  async rescheduleAppointment(
+    options: RescheduleAppointmentOptions,
+  ): Promise<RescheduleAppointmentResponse> {
+    try {
+      await this.ensureValidToken();
+
+      const calendarId = this.config.googleCalendarId;
+      if (!calendarId) {
+        return {
+          success: false,
+          appointmentId: options.appointmentId,
+          error: "Google calendar ID not configured",
+        };
+      }
+
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(options.appointmentId)}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${this.config.googleAccessToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            start: {
+              dateTime: options.newStartsAt.toISOString(),
+              timeZone: "Asia/Jerusalem",
+            },
+            end: {
+              dateTime: options.newEndsAt.toISOString(),
+              timeZone: "Asia/Jerusalem",
+            },
+          }),
+        },
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        return {
+          success: false,
+          appointmentId: options.appointmentId,
+          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+        };
+      }
+
+      return {
+        success: true,
+        appointmentId: options.appointmentId,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        appointmentId: options.appointmentId,
+        error: `Failed to reschedule appointment: ${message}`,
       };
     }
   }
@@ -209,6 +351,39 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 
   /**
+   * Gets calendar ID for a staff member
+   * Returns googleCalendarId if staffId provided, otherwise returns configured calendarId
+   */
+  private async getCalendarIdForStaff(staffId?: string): Promise<string | null> {
+    if (staffId) {
+      // Query database for staff member's Google calendar ID
+      const staffMember = await db.query.staff.findFirst({
+        where: (staff, { and, eq }) => {
+          const tenantId = this.tenantId as string;
+          return and(eq(staff.tenantId, tenantId), eq(staff.id, staffId));
+        },
+      });
+      return staffMember?.googleCalendarId ?? staffMember?.email ?? null;
+    }
+
+    // Fall back to configured calendar ID
+    return this.config.googleCalendarId ?? null;
+  }
+
+  /**
+   * Gets email address for a customer
+   */
+  private async getCustomerEmail(customerId: string): Promise<string | null> {
+    const customer = await db.query.customers.findFirst({
+      where: (customers, { and, eq }) => {
+        const tenantId = this.tenantId as string;
+        return and(eq(customers.tenantId, tenantId), eq(customers.id, customerId));
+      },
+    });
+    return customer?.email ?? null;
+  }
+
+  /**
    * Finds available slots between existing events
    * Considers duration requirement and buffer time
    */
@@ -221,8 +396,8 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     }>,
     durationMinutes: number,
     bufferMinutes: number,
-  ): AvailableSlot[] {
-    const slots: AvailableSlot[] = [];
+  ): Array<{ start: Date; end: Date }> {
+    const slots: Array<{ start: Date; end: Date }> = [];
 
     // Parse events and sort by start time
     const parsedEvents = events
