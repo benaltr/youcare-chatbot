@@ -32,10 +32,15 @@ export async function runAgent(input: RunAgentInput) {
 
   const systemPrompt = buildSystemPrompt({ tenant, config });
 
-  return streamText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: systemPrompt,
-    messages: input.messages,
-    maxOutputTokens: 1024,
-  });
+  try {
+    return streamText({
+      model: anthropic("claude-sonnet-4-6"),
+      system: systemPrompt,
+      messages: input.messages,
+      maxOutputTokens: 1024,
+    });
+  } catch (err: any) {
+    console.error("streamText error:", err?.message, err?.code, err?.status);
+    throw err;
+  }
 }

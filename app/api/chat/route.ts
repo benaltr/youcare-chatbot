@@ -117,7 +117,19 @@ export async function POST(req: Request): Promise<Response> {
     });
 
     // Get streaming response
-    const uiStream = result.toUIMessageStreamResponse();
+    let uiStream;
+    try {
+      uiStream = result.toUIMessageStreamResponse();
+    } catch (err: any) {
+      console.error("Failed to convert to UI stream:", err?.message);
+      return new Response(
+        JSON.stringify({
+          error: "Stream conversion error",
+          details: err?.message || "Unknown error",
+        }),
+        { status: 500, headers: { "content-type": "application/json" } }
+      );
+    }
 
     // Collect response text
     let fullResponseText = "";
