@@ -1,4 +1,3 @@
-import { convertToModelMessages, type UIMessage } from "ai";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { runAgent } from "@/lib/agent";
@@ -61,15 +60,19 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
 
-    // Convert UI messages to model messages
-    // Build messages array manually
-    const messages = uiMessages.map((msg: Record<string, unknown>) => ({
-      role: msg.role as string,
-      content: msg.content as string,
-    }));
+    // Build messages array safely
+    const messages = Array.isArray(uiMessages)
+      ? uiMessages.map((msg: Record<string, unknown>) => ({
+          role: msg.role as string,
+          content: msg.content as string,
+        }))
+      : [];
 
     // Extract last user message for language detection
-    const lastMessage = uiMessages[uiMessages.length - 1] as Record<string, unknown> | undefined;
+    const lastMessage =
+      Array.isArray(uiMessages) && uiMessages.length > 0
+        ? (uiMessages[uiMessages.length - 1] as Record<string, unknown>)
+        : undefined;
     const userPhone = phone || "unknown";
     const userText = (lastMessage?.content as string) || "";
     const detectedLanguage = detectLanguage(userText);
