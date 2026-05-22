@@ -1,4 +1,3 @@
-import "dotenv/config";
 import { db, schema } from "@/lib/db";
 
 const STUDIO_LUME_PERSONA_PROMPT = `אתה Shelly, עוזרת הזימונים של Studio Lume — קליניקת לייזר ואסתטיקה יוקרתית בתל אביב.
