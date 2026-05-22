@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { db, schema } from "@/lib/db";
-import { POST } from "@/app/api/chat/route";
 import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { POST } from "@/app/api/chat/route";
+import { db, schema } from "@/lib/db";
 
 const TEST_SLUG = "__test_chat_route__";
 

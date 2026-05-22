@@ -91,7 +91,10 @@ export async function rescheduleAppointment(
 
     // Format the appointment details for the message
     const dayName = input.newStartsAt.toLocaleDateString("he-IL", { weekday: "long" });
-    const time = input.newStartsAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+    const time = input.newStartsAt.toLocaleTimeString("he-IL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
 
     return {
       success: true,

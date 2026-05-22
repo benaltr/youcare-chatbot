@@ -141,7 +141,6 @@ describe("cancelAppointment", () => {
     expect(appointments[0]!.notes).toBe("Cancelled by customer");
   });
 
-
   it("returns error when appointment not found", async () => {
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
@@ -151,7 +150,6 @@ describe("cancelAppointment", () => {
     expect(result.success).toBe(false);
     expect(result.message).toContain("Appointment not found");
   });
-
 
   it("returns error when appointment is already cancelled", async () => {
     // First cancellation

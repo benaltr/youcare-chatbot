@@ -166,7 +166,6 @@ describe("rescheduleAppointment", () => {
     expect(result.message).toContain("Appointment not found");
   });
 
-
   it("returns error when appointment is not booked", async () => {
     // Create a cancelled appointment
     const serviceRows = await db

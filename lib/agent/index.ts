@@ -1,5 +1,5 @@
 import { anthropic } from "@ai-sdk/anthropic";
-import { streamText, type ModelMessage } from "ai";
+import { type ModelMessage, streamText } from "ai";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { buildSystemPrompt } from "./prompts/system";

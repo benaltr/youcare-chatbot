@@ -1,7 +1,7 @@
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { db, schema } from "@/lib/db";
-import { resolveTenantBySlug, resolveTenantByDomain } from "@/lib/tenants/resolve";
-import { eq } from "drizzle-orm";
+import { resolveTenantByDomain, resolveTenantBySlug } from "@/lib/tenants/resolve";
 
 const TEST_SLUG = "__test_tenant_resolve__";
 const TEST_DOMAIN = "test-resolve.local";

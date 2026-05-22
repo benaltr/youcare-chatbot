@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { db, schema } from "@/lib/db";
-import { runAgent } from "@/lib/agent";
 import { eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { runAgent } from "@/lib/agent";
+import { db, schema } from "@/lib/db";
 
 const TEST_SLUG = "__test_agent__";
 

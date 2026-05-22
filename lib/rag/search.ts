@@ -1,6 +1,6 @@
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { faqChunks, faqDocuments } from "@/lib/db/schema";
-import { eq, sql } from "drizzle-orm";
 import { embedQuery } from "./embed";
 
 export interface FaqSearchResult {
