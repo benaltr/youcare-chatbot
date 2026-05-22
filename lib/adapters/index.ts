@@ -27,12 +27,25 @@ export async function getCalendarAdapter(tenantId: string): Promise<CalendarAdap
     return null;
   }
 
+  // Load tenant config for timezone and other settings
+  const tenantConfigRows = await db
+    .select()
+    .from(schema.tenantConfigs)
+    .where(eq(schema.tenantConfigs.tenantId, tenantId))
+    .limit(1);
+
+  const tenantConfig = tenantConfigRows[0] || {};
+
   // Instantiate adapter based on type
   const credentials = adapterConfig.credentials as GoogleCalendarCredentials;
 
   switch (adapterConfig.adapter) {
     case "google_calendar":
-      return new GoogleCalendarAdapter(tenantId, credentials);
+      return new GoogleCalendarAdapter(
+        tenantId,
+        credentials,
+        tenantConfig as Record<string, unknown>,
+      );
     default:
       return null;
   }

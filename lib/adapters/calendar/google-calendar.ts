@@ -21,10 +21,16 @@ import type {
 export class GoogleCalendarAdapter implements CalendarAdapter {
   private tenantId: string;
   private config: GoogleCalendarCredentials;
+  private timezone: string;
 
-  constructor(tenantId: string, config: GoogleCalendarCredentials) {
+  constructor(
+    tenantId: string,
+    config: GoogleCalendarCredentials,
+    tenantConfig?: Record<string, unknown>,
+  ) {
     this.tenantId = tenantId;
     this.config = config;
+    this.timezone = (tenantConfig?.timezone as string) || "Asia/Jerusalem";
   }
 
   async findAvailableSlots(
@@ -67,11 +73,11 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await this.parseGoogleApiError(response);
         return {
           success: false,
           slots: [],
-          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+          error: `Google Calendar API error: ${error}`,
         };
       }
 
@@ -131,11 +137,11 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
         description: `Appointment booked via YouCare AI Chatbot${options.notes ? `\n\n${options.notes}` : ""}`,
         start: {
           dateTime: options.startsAt.toISOString(),
-          timeZone: "Asia/Jerusalem", // Default to Israel timezone
+          timeZone: this.timezone,
         },
         end: {
           dateTime: options.endsAt.toISOString(),
-          timeZone: "Asia/Jerusalem",
+          timeZone: this.timezone,
         },
         attendees: [{ email: customerEmail }, { email: calendarId }],
       };
@@ -153,11 +159,11 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       );
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await this.parseGoogleApiError(response);
         return {
           success: false,
           appointmentId: "",
-          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+          error: `Google Calendar API error: ${error}`,
         };
       }
 
@@ -201,10 +207,10 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       );
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await this.parseGoogleApiError(response);
         return {
           success: false,
-          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+          error: `Google Calendar API error: ${error}`,
         };
       }
 
@@ -244,22 +250,22 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
           body: JSON.stringify({
             start: {
               dateTime: options.newStartsAt.toISOString(),
-              timeZone: "Asia/Jerusalem",
+              timeZone: this.timezone,
             },
             end: {
               dateTime: options.newEndsAt.toISOString(),
-              timeZone: "Asia/Jerusalem",
+              timeZone: this.timezone,
             },
           }),
         },
       );
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await this.parseGoogleApiError(response);
         return {
           success: false,
           appointmentId: options.appointmentId,
-          error: `Google Calendar API error: ${error?.error?.message || response.statusText}`,
+          error: `Google Calendar API error: ${error}`,
         };
       }
 
@@ -278,20 +284,55 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 
   /**
+   * Parses error from Google API response
+   * Handles cases where response body is not valid JSON
+   */
+  private async parseGoogleApiError(response: Response): Promise<string> {
+    try {
+      const data = await response.json();
+      return data?.error?.message || data?.message || `HTTP ${response.status}`;
+    } catch {
+      return `HTTP ${response.status}: ${response.statusText}`;
+    }
+  }
+
+  /**
    * Ensures OAuth token is valid; refreshes if expired
-   * Updates database after refresh
+   * Updates database after refresh with race condition protection
+   * Implements optimistic check-and-set to handle concurrent requests
    */
   private async ensureValidToken(): Promise<void> {
+    // Check if token needs refresh with 1 minute buffer
+    const tokenBuffer = 60000;
     if (
       !this.config.googleAccessTokenExpiresAt ||
-      Date.now() >= this.config.googleAccessTokenExpiresAt
+      Date.now() >= this.config.googleAccessTokenExpiresAt - tokenBuffer
     ) {
-      // Token expired or missing; refresh using refresh token
+      // Fetch current config from DB to detect if another process already refreshed
+      const currentConfig = await db.query.tenantAdapterConfigs.findFirst({
+        where: and(
+          eq(schema.tenantAdapterConfigs.tenantId, this.tenantId),
+          eq(schema.tenantAdapterConfigs.category, "calendar"),
+        ),
+      });
+
+      // Check again with DB version; if already refreshed by another process, use that token
+      const dbCredentials = currentConfig?.credentials as GoogleCalendarCredentials | undefined;
+      if (
+        dbCredentials?.googleAccessTokenExpiresAt &&
+        Date.now() < dbCredentials.googleAccessTokenExpiresAt - tokenBuffer
+      ) {
+        // Another process already refreshed; update our in-memory config
+        this.config = dbCredentials;
+        return;
+      }
+
+      // Token still expired; refresh it ourselves
       const newTokens = await this.refreshAccessToken();
       this.config.googleAccessToken = newTokens.accessToken;
       this.config.googleAccessTokenExpiresAt = newTokens.expiresAt;
 
-      // Update database synchronously
+      // Update database
       await db
         .update(schema.tenantAdapterConfigs)
         .set({ credentials: this.config })

@@ -29,7 +29,11 @@ describe("GoogleCalendarAdapter", () => {
   let adapter: GoogleCalendarAdapter;
 
   beforeEach(async () => {
-    adapter = new GoogleCalendarAdapter(TEST_TENANT_ID, { ...TEST_CONFIG });
+    adapter = new GoogleCalendarAdapter(
+      TEST_TENANT_ID,
+      { ...TEST_CONFIG },
+      { timezone: "Asia/Jerusalem" },
+    );
   });
 
   afterEach(() => {
@@ -481,7 +485,17 @@ describe("GoogleCalendarAdapter", () => {
         updatedAt: new Date(),
       } as any);
 
-      // Mock the database update call
+      // Mock the database query and update calls
+      vi.spyOn(db.query.tenantAdapterConfigs, "findFirst").mockResolvedValue({
+        tenantId: TEST_TENANT_ID,
+        category: "calendar",
+        adapter: "google_calendar",
+        credentials: expiredConfig,
+        config: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      } as any);
+
       const updateMock = vi.fn().mockReturnValue({
         set: vi.fn().mockReturnValue({
           where: vi.fn().mockResolvedValue(undefined),
@@ -490,7 +504,9 @@ describe("GoogleCalendarAdapter", () => {
       type UpdateMock = ReturnType<typeof updateMock>;
       vi.spyOn(db, "update").mockImplementation(updateMock as () => UpdateMock);
 
-      const expiredAdapter = new GoogleCalendarAdapter(TEST_TENANT_ID, expiredConfig);
+      const expiredAdapter = new GoogleCalendarAdapter(TEST_TENANT_ID, expiredConfig, {
+        timezone: "Asia/Jerusalem",
+      });
 
       const options: FindAvailableSlotsOptions = {
         serviceId: TEST_SERVICE_ID,
