@@ -121,16 +121,14 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
         };
       }
 
-      // Ensure we have customer email
+      // Get customer email if available (optional for booking creation)
       const customerEmail =
         options.customerEmail ?? (await this.getCustomerEmail(options.customerId));
-      if (!customerEmail) {
-        return {
-          success: false,
-          appointmentId: "",
-          error: "Customer email not found",
-        };
-      }
+
+      // Create event with or without customer email
+      // If no email available, we'll just not add them as an attendee
+
+      const attendees = customerEmail ? [{ email: customerEmail }, { email: calendarId }] : [{ email: calendarId }];
 
       const event = {
         summary: `${options.serviceName} - ${options.customerName}`,
@@ -143,7 +141,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
           dateTime: options.endsAt.toISOString(),
           timeZone: this.timezone,
         },
-        attendees: [{ email: customerEmail }, { email: calendarId }],
+        attendees,
       };
 
       const response = await fetch(

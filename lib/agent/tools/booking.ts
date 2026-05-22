@@ -47,16 +47,23 @@ export async function createBooking(input: BookingInput) {
     try {
       const calendarAdapter = await getCalendarAdapter(input.tenantId);
       if (calendarAdapter) {
-        await calendarAdapter.createAppointment({
+        const result = await calendarAdapter.createAppointment({
           customerId: input.customerId,
           customerName: input.customerName,
-          customerEmail: input.customerPhone,
+          customerEmail: undefined,
           serviceId: service.id,
           serviceName: service.name,
           startsAt: startTime,
           endsAt: endTime,
           notes: `Booked via web widget`,
         });
+        if (!result.success) {
+          console.error("Google Calendar sync failed:", result.error);
+        } else {
+          console.log("✓ Google Calendar event created:", result.calendarUrl);
+        }
+      } else {
+        console.warn("No Google Calendar adapter configured for tenant:", input.tenantId);
       }
     } catch (err: any) {
       console.error("Failed to create Google Calendar event:", err.message);
