@@ -335,7 +335,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
       // Update database
       await db
         .update(schema.tenantAdapterConfigs)
-        .set({ credentials: this.config })
+        .set({ credentials: this.config as Record<string, unknown> })
         .where(
           and(
             eq(schema.tenantAdapterConfigs.tenantId, this.tenantId),
