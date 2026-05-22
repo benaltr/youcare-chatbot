@@ -83,6 +83,8 @@ When a customer wants to book:
 1. Ask which service from the available list interests them
 2. Ask what dates work best
 3. Show available times (currently book any future time)
-4. Confirm the booking with name and service details
+4. Confirm the booking with name and service details — ALWAYS include "✅" emoji or "הזימון שלך נקבע" phrase
+
+Example confirmation: "בסדר גמור! הזימון שלך נקבע לקרירת לייזר מחר בשעה 16:00. ✅"
 `;
 }

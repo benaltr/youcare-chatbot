@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runAgent } from "@/lib/agent";
 import { db, schema } from "@/lib/db";
 import { resolveTenantBySlug } from "@/lib/tenants/resolve";
+import { createBooking } from "@/lib/agent/tools/booking";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -162,7 +163,68 @@ export async function POST(req: Request): Promise<Response> {
       }
     }
 
-    // Save assistant message
+
+    // Check if bot just confirmed a booking and create it in Google Calendar
+    const bookingConfirmed = fullResponseText.includes('הזימון שלך נקבע') ||
+      fullResponseText.includes('booking confirmed') ||
+      fullResponseText.includes('זימון שלך אושר') ||
+      fullResponseText.includes("You're all set") ||
+      fullResponseText.includes('✅');
+
+    if (bookingConfirmed && customer && conversation) {
+      // Extract booking details from conversation
+      const allMessages = [...uiMessages];
+      const assistantResponse = fullResponseText;
+      
+      // Extract customer name if mentioned in response
+      let customerName = customer.name;
+      const nameMatch = assistantResponse.match(/([א-ת]+(?:s+[א-ת]+)?)/);
+      if (nameMatch && !customerName) {
+        customerName = nameMatch[1];
+        await db.update(schema.customers).set({ name: customerName }).where(eq(schema.customers.id, customer.id));
+      }
+
+      // Parse service from conversation
+      let serviceSlug = 'laser-face'; // default
+      const conversationText = allMessages.map(m => String(m.content)).join(' ');
+      if (conversationText.includes('גוף מלא') || conversationText.includes('full body')) {
+        serviceSlug = 'laser-full';
+      } else if (conversationText.includes('אזור') || conversationText.includes('single')) {
+        serviceSlug = 'laser-single';
+      } else if (conversationText.includes('hydra')) {
+        serviceSlug = 'hydrafacial';
+      } else if (conversationText.includes('micro')) {
+        serviceSlug = 'microneedling';
+      }
+
+      // Parse date/time
+      const timeMatch = conversationText.match(/(\d{1,2}):(\d{2})?|ב(\d{1,2})/);
+      const hour = timeMatch ? parseInt(timeMatch[1] || timeMatch[3]) : 17;
+      const minute = timeMatch ? parseInt(timeMatch[2] || '0') : 0;
+      
+      const now = new Date();
+      const bookingTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute);
+      if (bookingTime < now) {
+        bookingTime.setDate(bookingTime.getDate() + 1);
+      }
+
+      try {
+        await createBooking({
+          tenantId: tenant.id,
+          customerId: customer.id,
+          serviceSlug,
+          dateTime: bookingTime.toISOString(),
+          customerName: customerName || 'Guest',
+          customerPhone: userPhone,
+        });
+        console.log(`✓ Booking created: ${customerName} for ${serviceSlug} on ${bookingTime.toISOString()}`);
+      } catch (err: any) {
+        console.error('Booking creation failed:', err.message);
+      }
+    }
+
+
+        // Save assistant message
     const usage = await result.usage;
     const costUsd = calculateCost(usage?.inputTokens || 0, usage?.outputTokens || 0);
 
