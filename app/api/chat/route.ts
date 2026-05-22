@@ -15,11 +15,11 @@ const RequestSchema = z.object({
   phone: z.string().optional(),
 });
 
-function calculateCost(promptTokens: number, completionTokens: number): string {
+function calculateCost(inputTokens: number, outputTokens: number): string {
   // Claude Sonnet 4.6 pricing (approximately)
   // Input: $3 per 1M tokens, Output: $15 per 1M tokens
-  const inputCost = (3 / 1_000_000) * promptTokens;
-  const outputCost = (15 / 1_000_000) * completionTokens;
+  const inputCost = (3 / 1_000_000) * inputTokens;
+  const outputCost = (15 / 1_000_000) * outputTokens;
   const total = inputCost + outputCost;
   return total.toFixed(6);
 }
@@ -173,15 +173,15 @@ export async function POST(req: Request): Promise<Response> {
 
     // Save assistant message with collected response
     const usage = result.usage;
-    const costUsd = calculateCost(usage?.promptTokens || 0, usage?.completionTokens || 0);
+    const costUsd = calculateCost(usage?.inputTokens || 0, usage?.outputTokens || 0);
 
     await db.insert(schema.messages).values({
       conversationId: conversation.id,
       role: "assistant",
       content: fullResponseText,
       model: "claude-sonnet-4-6",
-      tokensIn: usage?.promptTokens || 0,
-      tokensOut: usage?.completionTokens || 0,
+      tokensIn: usage?.inputTokens || 0,
+      tokensOut: usage?.outputTokens || 0,
       costUsd,
       createdAt: new Date(),
     });
