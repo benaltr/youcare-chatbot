@@ -167,11 +167,12 @@ export async function POST(req: Request): Promise<Response> {
 
     return uiStream;
   } catch (err: any) {
-    console.error("Chat API error:", err?.message || err);
+    console.error("Chat API error:", err?.message || err, err?.stack);
     return new Response(
       JSON.stringify({
         error: "Internal error",
         details: err?.message || "Unknown error",
+        code: err?.code,
       }),
       { status: 500, headers: { "content-type": "application/json" } }
     );
