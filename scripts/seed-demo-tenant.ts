@@ -200,8 +200,7 @@ async function seedNailBusiness() {
         bufferMinutes: 10,
         priceCents: 5000, // 50 NIS
         category: "hand",
-        prepInstructions:
-          "הסירו ציפוי קיים והביאו הנושא מעל המים בחמים למשך 5 דקות",
+        prepInstructions: "הסירו ציפוי קיים והביאו הנושא מעל המים בחמים למשך 5 דקות",
         active: "true",
       },
       {
