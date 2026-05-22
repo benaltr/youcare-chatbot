@@ -4,6 +4,7 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().url(),
   ANTHROPIC_API_KEY: z.string().min(1, "ANTHROPIC_API_KEY is required"),
   NEXT_PUBLIC_APP_URL: z.string().url().default("http://localhost:3000"),
+  VOYAGE_API_KEY: z.string().min(1, "VOYAGE_API_KEY is required").optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;
