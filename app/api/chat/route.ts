@@ -197,7 +197,7 @@ export async function POST(req: Request): Promise<Response> {
       });
     }
     console.error("Chat API error:", err);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
+    return new Response(JSON.stringify({ error: "Internal error", details: message }), {
       status: 500,
       headers: { "content-type": "application/json" },
     });
