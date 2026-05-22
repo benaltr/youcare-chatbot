@@ -65,9 +65,9 @@ export async function POST(req: Request): Promise<Response> {
     const messages = await convertToModelMessages(uiMessages as UIMessage[]);
 
     // Extract last user message for language detection
-    const lastUIMessage = uiMessages[uiMessages.length - 1] as UIMessage | undefined;
+    const lastMessage = uiMessages[uiMessages.length - 1] as Record<string, unknown> | undefined;
     const userPhone = phone || "unknown";
-    const userText = lastUIMessage?.content || "";
+    const userText = (lastMessage?.content as string) || "";
     const detectedLanguage = detectLanguage(userText);
 
     // Find or create customer
