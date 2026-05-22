@@ -33,4 +33,9 @@ export {
   type RescheduleAppointmentResult,
   rescheduleAppointment,
 } from "./reschedule_appointment";
+export {
+  type SearchFaqsInput,
+  type SearchFaqsResult,
+  searchFaqsTool,
+} from "./search_faqs";
 export * from "./utils";
