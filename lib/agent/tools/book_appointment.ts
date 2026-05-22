@@ -13,24 +13,16 @@ export interface BookAppointmentInput {
   serviceId: string;
   staffId?: string;
   startsAt: Date;
-  endsAt: Date;
   conversationId?: string;
   notes?: string;
 }
 
 export interface BookAppointmentResult {
   success: boolean;
-  appointmentId?: string;
+  message: string;
   data?: {
-    id: string;
-    customerId: string;
-    serviceName: string;
-    startsAt: Date;
-    endsAt: Date;
-    staffName?: string;
-    status: string;
+    appointmentId: string;
   };
-  error?: string;
 }
 
 export async function bookAppointment(input: BookAppointmentInput): Promise<BookAppointmentResult> {
@@ -51,7 +43,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     if (!customer) {
       return {
         success: false,
-        error: "Customer not found",
+        message: "Customer not found",
       };
     }
 
@@ -68,9 +60,12 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
     if (!service) {
       return {
         success: false,
-        error: "Service not found",
+        message: "Service not found",
       };
     }
+
+    // Calculate endsAt from service duration
+    const endsAt = new Date(input.startsAt.getTime() + service.durationMinutes * 60000);
 
     // Get staff name if provided
     let staffName: string | undefined;
@@ -93,7 +88,7 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
         serviceId: input.serviceId,
         staffId: input.staffId,
         startsAt: input.startsAt,
-        endsAt: input.endsAt,
+        endsAt,
         status: "booked",
         bookedVia: "bot",
         notes: input.notes,
@@ -109,34 +104,32 @@ export async function bookAppointment(input: BookAppointmentInput): Promise<Book
       await adapter.createAppointment({
         customerId: input.customerId,
         customerName: customer.name || "Customer",
-        customerEmail: customer.email,
+        customerEmail: customer.email || undefined,
         serviceId: input.serviceId,
         serviceName: service.name,
         staffId: input.staffId,
         staffName,
         startsAt: input.startsAt,
-        endsAt: input.endsAt,
+        endsAt,
         notes: input.notes,
       });
     }
 
+    // Format the appointment details for the message
+    const dayName = input.startsAt.toLocaleDateString("he-IL", { weekday: "long" });
+    const time = input.startsAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+
     return {
       success: true,
-      appointmentId: appointment.id,
+      message: `✅ Booked! Your ${service.name} appointment is ${dayName} at ${time}.`,
       data: {
-        id: appointment.id,
-        customerId: appointment.customerId,
-        serviceName: service.name,
-        startsAt: appointment.startsAt,
-        endsAt: appointment.endsAt,
-        staffName,
-        status: appointment.status,
+        appointmentId: appointment.id,
       },
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to book appointment",
+      message: error instanceof Error ? error.message : "Failed to book appointment",
     };
   }
 }

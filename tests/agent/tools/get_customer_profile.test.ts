@@ -155,7 +155,7 @@ describe("getCustomerProfile", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Customer not found");
+    expect(result.message).toBe("Customer not found");
   });
 
   it("returns error when customer does not belong to tenant", async () => {
@@ -185,7 +185,7 @@ describe("getCustomerProfile", () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Customer not found");
+    expect(result.message).toBe("Customer not found");
 
     // Clean up
     await db.delete(schema.tenants).where(eq(schema.tenants.id, otherTenantId));

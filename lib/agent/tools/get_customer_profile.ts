@@ -13,6 +13,7 @@ export interface GetCustomerProfileInput {
 
 export interface GetCustomerProfileResult {
   success: boolean;
+  message: string;
   data?: {
     id: string;
     name?: string;
@@ -35,7 +36,6 @@ export interface GetCustomerProfileResult {
       status: string;
     }>;
   };
-  error?: string;
 }
 
 export async function getCustomerProfile(
@@ -58,7 +58,7 @@ export async function getCustomerProfile(
     if (!customer) {
       return {
         success: false,
-        error: "Customer not found",
+        message: "Customer not found",
       };
     }
 
@@ -102,21 +102,25 @@ export async function getCustomerProfile(
 
     return {
       success: true,
+      message: "Customer profile retrieved",
       data: {
         id: customer.id,
-        name: customer.name,
+        name: customer.name || undefined,
         phone: customer.phone,
-        email: customer.email,
+        email: customer.email || undefined,
         languagePref: customer.languagePref,
-        profile: customer.profile,
-        upcomingAppointments,
+        profile: customer.profile || undefined,
+        upcomingAppointments: upcomingAppointments.map((apt) => ({
+          ...apt,
+          staffName: apt.staffName || undefined,
+        })),
         packages,
       },
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to get customer profile",
+      message: error instanceof Error ? error.message : "Failed to get customer profile",
     };
   }
 }

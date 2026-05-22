@@ -94,11 +94,10 @@ describe("cancelAppointment", () => {
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     expect(result.success).toBe(true);
-    expect(result.data?.status).toBe("cancelled");
+    expect(result.message).toBe("✅ Appointment cancelled.");
 
     // Verify in database
     const appointments = await db
@@ -116,46 +115,22 @@ describe("cancelAppointment", () => {
 
     vi.mocked(getCalendarAdapter).mockResolvedValue(mockAdapter as any);
 
-    const reason = "Customer requested cancellation";
-
     await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
-      reason,
     });
 
     expect(mockAdapter.cancelAppointment).toHaveBeenCalledWith(
       expect.objectContaining({
         appointmentId: TEST_APPOINTMENT_ID,
-        reason,
       }),
     );
   });
 
-  it("includes reason in appointment notes", async () => {
-    const reason = "Customer not feeling well";
-
+  it("sets default cancellation note", async () => {
     await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
-      reason,
-    });
-
-    const appointments = await db
-      .select()
-      .from(schema.appointments)
-      .where(eq(schema.appointments.id, TEST_APPOINTMENT_ID));
-
-    expect(appointments[0]!.notes).toContain(reason);
-  });
-
-  it("sets default cancellation note when no reason provided", async () => {
-    await cancelAppointment({
-      tenantId: TEST_TENANT_ID,
-      appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     const appointments = await db
@@ -166,56 +141,33 @@ describe("cancelAppointment", () => {
     expect(appointments[0]!.notes).toBe("Cancelled by customer");
   });
 
+
   it("returns error when appointment not found", async () => {
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: "nonexistent-appointment",
-      customerId: TEST_CUSTOMER_ID,
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Appointment not found");
+    expect(result.message).toContain("Appointment not found");
   });
 
-  it("returns error when appointment does not belong to customer", async () => {
-    // Create another customer
-    const otherCustomerRows = await db
-      .insert(schema.customers)
-      .values({
-        tenantId: TEST_TENANT_ID,
-        phone: "+9999999999",
-        name: "Other Customer",
-        languagePref: "he",
-      })
-      .returning();
-
-    const result = await cancelAppointment({
-      tenantId: TEST_TENANT_ID,
-      appointmentId: TEST_APPOINTMENT_ID,
-      customerId: otherCustomerRows[0]!.id,
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Appointment not found");
-  });
 
   it("returns error when appointment is already cancelled", async () => {
     // First cancellation
     await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     // Try to cancel again
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Appointment is already cancelled");
+    expect(result.message).toBe("Appointment is already cancelled");
   });
 
   it("returns error when appointment belongs to different tenant", async () => {
@@ -267,7 +219,6 @@ describe("cancelAppointment", () => {
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: otherAppointmentRows[0]!.id,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     expect(result.success).toBe(false);
@@ -282,11 +233,10 @@ describe("cancelAppointment", () => {
     const result = await cancelAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
     });
 
     // Should still succeed in cancelling
     expect(result.success).toBe(true);
-    expect(result.data?.status).toBe("cancelled");
+    expect(result.message).toBe("✅ Appointment cancelled.");
   });
 });

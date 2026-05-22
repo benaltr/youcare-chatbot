@@ -6,6 +6,7 @@
 import { and, eq } from "drizzle-orm";
 import { getCalendarAdapter } from "@/lib/adapters";
 import { db, schema } from "@/lib/db";
+import { groupSlotsByDate } from "./utils";
 
 export interface FindAvailableSlotsInput {
   tenantId: string;
@@ -17,12 +18,9 @@ export interface FindAvailableSlotsInput {
 
 export interface FindAvailableSlotsResult {
   success: boolean;
-  slots?: Array<{
-    start: Date;
-    end: Date;
-  }>;
+  message: string;
+  slots?: Record<string, string[]>;
   serviceName?: string;
-  error?: string;
 }
 
 export async function findAvailableSlots(
@@ -42,7 +40,7 @@ export async function findAvailableSlots(
     if (!service) {
       return {
         success: false,
-        error: "Service not found",
+        message: "Service not found",
       };
     }
 
@@ -51,7 +49,7 @@ export async function findAvailableSlots(
     if (!adapter) {
       return {
         success: false,
-        error: "Calendar adapter not configured",
+        message: "Calendar adapter not configured",
       };
     }
 
@@ -70,19 +68,23 @@ export async function findAvailableSlots(
     if (!response.success) {
       return {
         success: false,
-        error: response.error || "Failed to find available slots",
+        message: response.error || "Failed to find available slots",
       };
     }
 
+    // Group slots by date
+    const groupedSlots = groupSlotsByDate(response.slots || []);
+
     return {
       success: true,
-      slots: response.slots,
+      message: `Available slots for ${service.name}:`,
+      slots: groupedSlots,
       serviceName: service.name,
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to find available slots",
+      message: error instanceof Error ? error.message : "Failed to find available slots",
     };
   }
 }

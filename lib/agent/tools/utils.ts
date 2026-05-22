@@ -68,3 +68,43 @@ export function formatPrice(priceCents: number): string {
   const priceNIS = priceCents / 100;
   return `₪${priceNIS.toLocaleString("he-IL", { maximumFractionDigits: 0 })}`;
 }
+
+/**
+ * Group available slots by date with string keys (e.g., "Friday, January 15")
+ * Returns a record with date strings as keys and time arrays as values
+ */
+export function groupSlotsByDate(
+  slots: Array<{ start: Date; end: Date }>,
+): Record<string, string[]> {
+  const grouped: Record<string, string[]> = {};
+
+  for (const slot of slots) {
+    const dayName = getDayNameHebrew(slot.start);
+    const dayOfMonth = slot.start.getDate();
+    const monthsHebrew = [
+      "ינואר",
+      "פברואר",
+      "מרץ",
+      "אפריל",
+      "מאי",
+      "יוני",
+      "יולי",
+      "אוגוסט",
+      "ספטמבר",
+      "אוקטובר",
+      "נובמבר",
+      "דצמבר",
+    ];
+    const monthName = monthsHebrew[slot.start.getMonth()];
+    const dateKey = `${dayName}, ${dayOfMonth} ב${monthName}`;
+
+    const timeStr = formatTimeRange(slot.start, slot.end);
+
+    if (!grouped[dateKey]) {
+      grouped[dateKey] = [];
+    }
+    grouped[dateKey]!.push(timeStr);
+  }
+
+  return grouped;
+}

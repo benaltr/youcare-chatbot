@@ -10,17 +10,14 @@ import { db, schema } from "@/lib/db";
 export interface CancelAppointmentInput {
   tenantId: string;
   appointmentId: string;
-  customerId: string;
-  reason?: string;
 }
 
 export interface CancelAppointmentResult {
   success: boolean;
+  message: string;
   data?: {
     appointmentId: string;
-    status: string;
   };
-  error?: string;
 }
 
 export async function cancelAppointment(
@@ -35,7 +32,6 @@ export async function cancelAppointment(
         and(
           eq(schema.appointments.id, input.appointmentId),
           eq(schema.appointments.tenantId, input.tenantId),
-          eq(schema.appointments.customerId, input.customerId),
         ),
       )
       .limit(1);
@@ -44,14 +40,14 @@ export async function cancelAppointment(
     if (!appointment) {
       return {
         success: false,
-        error: "Appointment not found or does not belong to this customer",
+        message: "Appointment not found",
       };
     }
 
     if (appointment.status === "cancelled") {
       return {
         success: false,
-        error: "Appointment is already cancelled",
+        message: "Appointment is already cancelled",
       };
     }
 
@@ -60,7 +56,7 @@ export async function cancelAppointment(
       .update(schema.appointments)
       .set({
         status: "cancelled",
-        notes: input.reason ? `Cancelled: ${input.reason}` : "Cancelled by customer",
+        notes: "Cancelled by customer",
       })
       .where(eq(schema.appointments.id, input.appointmentId));
 
@@ -69,21 +65,20 @@ export async function cancelAppointment(
     if (adapter) {
       await adapter.cancelAppointment({
         appointmentId: input.appointmentId,
-        reason: input.reason,
       });
     }
 
     return {
       success: true,
+      message: "✅ Appointment cancelled.",
       data: {
         appointmentId: input.appointmentId,
-        status: "cancelled",
       },
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to cancel appointment",
+      message: error instanceof Error ? error.message : "Failed to cancel appointment",
     };
   }
 }

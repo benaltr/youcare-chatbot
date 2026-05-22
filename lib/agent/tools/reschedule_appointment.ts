@@ -10,20 +10,15 @@ import { db, schema } from "@/lib/db";
 export interface RescheduleAppointmentInput {
   tenantId: string;
   appointmentId: string;
-  customerId: string;
   newStartsAt: Date;
-  newEndsAt: Date;
 }
 
 export interface RescheduleAppointmentResult {
   success: boolean;
+  message: string;
   data?: {
     appointmentId: string;
-    newStartsAt: Date;
-    newEndsAt: Date;
-    status: string;
   };
-  error?: string;
 }
 
 export async function rescheduleAppointment(
@@ -38,7 +33,6 @@ export async function rescheduleAppointment(
         and(
           eq(schema.appointments.id, input.appointmentId),
           eq(schema.appointments.tenantId, input.tenantId),
-          eq(schema.appointments.customerId, input.customerId),
         ),
       )
       .limit(1);
@@ -47,23 +41,41 @@ export async function rescheduleAppointment(
     if (!appointment) {
       return {
         success: false,
-        error: "Appointment not found or does not belong to this customer",
+        message: "Appointment not found",
       };
     }
 
     if (appointment.status !== "booked") {
       return {
         success: false,
-        error: "Cannot reschedule an appointment that is not booked",
+        message: "Cannot reschedule an appointment that is not booked",
       };
     }
+
+    // Get service to calculate duration
+    const serviceRows = await db
+      .select()
+      .from(schema.services)
+      .where(eq(schema.services.id, appointment.serviceId))
+      .limit(1);
+
+    const service = serviceRows[0];
+    if (!service) {
+      return {
+        success: false,
+        message: "Service not found",
+      };
+    }
+
+    // Calculate newEndsAt from service duration
+    const newEndsAt = new Date(input.newStartsAt.getTime() + service.durationMinutes * 60000);
 
     // Update appointment in database
     await db
       .update(schema.appointments)
       .set({
         startsAt: input.newStartsAt,
-        endsAt: input.newEndsAt,
+        endsAt: newEndsAt,
       })
       .where(eq(schema.appointments.id, input.appointmentId));
 
@@ -73,23 +85,25 @@ export async function rescheduleAppointment(
       await adapter.rescheduleAppointment({
         appointmentId: input.appointmentId,
         newStartsAt: input.newStartsAt,
-        newEndsAt: input.newEndsAt,
+        newEndsAt,
       });
     }
 
+    // Format the appointment details for the message
+    const dayName = input.newStartsAt.toLocaleDateString("he-IL", { weekday: "long" });
+    const time = input.newStartsAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" });
+
     return {
       success: true,
+      message: `✅ Rescheduled to ${dayName} at ${time}.`,
       data: {
         appointmentId: input.appointmentId,
-        newStartsAt: input.newStartsAt,
-        newEndsAt: input.newEndsAt,
-        status: "booked",
       },
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to reschedule appointment",
+      message: error instanceof Error ? error.message : "Failed to reschedule appointment",
     };
   }
 }

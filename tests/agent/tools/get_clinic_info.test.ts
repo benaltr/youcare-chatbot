@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getClinicInfo } from "@/lib/agent/tools/get_clinic_info";
 import { db, schema } from "@/lib/db";
 
@@ -76,64 +76,63 @@ afterEach(async () => {
 });
 
 describe("getClinicInfo", () => {
-  it("returns clinic name and contact info", async () => {
+  it("returns all info (default field)", async () => {
     const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
 
     expect(result.success).toBe(true);
-    expect(result.data?.name).toBe("Test Clinic");
-    expect(result.data?.phone).toBe("+1234567890");
+    expect(result.message).toBeTruthy();
+    expect(result.data?.contact?.name).toBe("Test Clinic");
+    expect(result.data?.contact?.phone).toBe("+1234567890");
+    expect(result.data?.hours).toBeDefined();
+    expect(result.data?.services).toBeDefined();
   });
 
-  it("returns business hours", async () => {
-    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
+  it("returns only contact info when field='contact'", async () => {
+    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID, field: "contact" });
 
     expect(result.success).toBe(true);
-    expect(result.data?.businessHours).toBeDefined();
-    expect(result.data?.businessHours?.Monday).toEqual({ open: "09:00", close: "17:00" });
+    expect(result.data?.contact?.name).toBe("Test Clinic");
+    expect(result.data?.contact?.phone).toBe("+1234567890");
+    expect(result.data?.hours).toBeUndefined();
+    expect(result.data?.services).toBeUndefined();
   });
 
-  it("returns all services for the clinic", async () => {
-    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
+  it("returns only business hours when field='hours'", async () => {
+    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID, field: "hours" });
 
     expect(result.success).toBe(true);
+    expect(result.data?.hours).toBeDefined();
+    expect(result.data?.hours?.Monday).toEqual({ open: "09:00", close: "17:00" });
+    expect(result.data?.contact).toBeUndefined();
+    expect(result.data?.services).toBeUndefined();
+  });
+
+  it("returns only services when field='services'", async () => {
+    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID, field: "services" });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.services).toBeDefined();
     expect(result.data?.services).toHaveLength(2);
-    expect(result.data?.services[0]?.name).toBe("Laser Hair Removal");
-    expect(result.data?.services[1]?.name).toBe("Facial Treatment");
+    expect(result.data?.services?.[0]?.name).toBe("Laser Hair Removal");
+    expect(result.data?.hours).toBeUndefined();
+    expect(result.data?.contact).toBeUndefined();
   });
 
   it("includes service details (duration, price, category)", async () => {
-    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
+    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID, field: "services" });
 
     expect(result.success).toBe(true);
-    const laserService = result.data?.services[0];
+    const laserService = result.data?.services?.[0];
     expect(laserService?.durationMinutes).toBe(45);
     expect(laserService?.priceCents).toBe(50000);
     expect(laserService?.category).toBe("Hair Removal");
-  });
-
-  it("returns all staff members", async () => {
-    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
-
-    expect(result.success).toBe(true);
-    expect(result.data?.staff).toHaveLength(2);
-    expect(result.data?.staff[0]?.name).toBe("Sarah");
-    expect(result.data?.staff[1]?.name).toBe("David");
-  });
-
-  it("includes staff qualifications", async () => {
-    const result = await getClinicInfo({ tenantId: TEST_TENANT_ID });
-
-    expect(result.success).toBe(true);
-    const sarah = result.data?.staff[0];
-    expect(sarah?.qualifications).toContain("laser");
-    expect(sarah?.qualifications).toContain("facial");
   });
 
   it("returns error when clinic not found", async () => {
     const result = await getClinicInfo({ tenantId: "nonexistent-clinic" });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Clinic not found");
+    expect(result.message).toBe("Clinic not found");
   });
 
   it("handles clinic with no business hours config", async () => {
@@ -156,14 +155,14 @@ describe("getClinicInfo", () => {
     const result = await getClinicInfo({ tenantId: noHoursId });
 
     expect(result.success).toBe(true);
-    expect(result.data?.businessHours).toBeUndefined();
+    expect(result.data?.hours).toBeUndefined();
 
     // Clean up
     await db.delete(schema.tenants).where(eq(schema.tenants.id, noHoursId));
   });
 
   it("handles empty services and staff lists", async () => {
-    // Create a new tenant with no services or staff
+    // Create a new tenant with no services
     const emptyId = "empty-clinic";
     await db.insert(schema.tenants).values({
       id: emptyId,
@@ -183,7 +182,6 @@ describe("getClinicInfo", () => {
 
     expect(result.success).toBe(true);
     expect(result.data?.services).toHaveLength(0);
-    expect(result.data?.staff).toHaveLength(0);
 
     // Clean up
     await db.delete(schema.tenants).where(eq(schema.tenants.id, emptyId));

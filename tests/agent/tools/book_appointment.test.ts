@@ -94,7 +94,6 @@ afterEach(async () => {
 describe("bookAppointment", () => {
   it("creates an appointment in the database", async () => {
     const startDate = new Date("2026-06-15T14:00:00Z");
-    const endDate = new Date("2026-06-15T15:00:00Z");
 
     const result = await bookAppointment({
       tenantId: TEST_TENANT_ID,
@@ -102,20 +101,18 @@ describe("bookAppointment", () => {
       serviceId: TEST_SERVICE_ID,
       staffId: TEST_STAFF_ID,
       startsAt: startDate,
-      endsAt: endDate,
       notes: "Test appointment",
     });
 
     expect(result.success).toBe(true);
-    expect(result.appointmentId).toBeDefined();
-    expect(result.data?.serviceName).toBe("Treatment Service");
-    expect(result.data?.staffName).toBe("Staff Member");
+    expect(result.message).toBeTruthy();
+    expect(result.data?.appointmentId).toBeDefined();
 
     // Verify in database
     const appointments = await db
       .select()
       .from(schema.appointments)
-      .where(eq(schema.appointments.id, result.appointmentId!));
+      .where(eq(schema.appointments.id, result.data!.appointmentId!));
 
     expect(appointments).toHaveLength(1);
     expect(appointments[0]!.status).toBe("booked");
@@ -130,7 +127,7 @@ describe("bookAppointment", () => {
     vi.mocked(getCalendarAdapter).mockResolvedValue(mockAdapter as any);
 
     const startDate = new Date("2026-06-15T14:00:00Z");
-    const endDate = new Date("2026-06-15T15:00:00Z");
+    const endDate = new Date("2026-06-15T15:00:00Z"); // 60 minutes duration
 
     await bookAppointment({
       tenantId: TEST_TENANT_ID,
@@ -138,7 +135,6 @@ describe("bookAppointment", () => {
       serviceId: TEST_SERVICE_ID,
       staffId: TEST_STAFF_ID,
       startsAt: startDate,
-      endsAt: endDate,
     });
 
     expect(mockAdapter.createAppointment).toHaveBeenCalledWith(
@@ -158,31 +154,27 @@ describe("bookAppointment", () => {
 
   it("handles appointment without staff", async () => {
     const startDate = new Date("2026-06-15T14:00:00Z");
-    const endDate = new Date("2026-06-15T15:00:00Z");
 
     const result = await bookAppointment({
       tenantId: TEST_TENANT_ID,
       customerId: TEST_CUSTOMER_ID,
       serviceId: TEST_SERVICE_ID,
       startsAt: startDate,
-      endsAt: endDate,
     });
 
     expect(result.success).toBe(true);
-    expect(result.data?.staffName).toBeUndefined();
+    expect(result.message).toBeTruthy();
   });
 
   it("includes conversation ID when provided", async () => {
     const conversationId = "conv-123";
     const startDate = new Date("2026-06-15T14:00:00Z");
-    const endDate = new Date("2026-06-15T15:00:00Z");
 
     const result = await bookAppointment({
       tenantId: TEST_TENANT_ID,
       customerId: TEST_CUSTOMER_ID,
       serviceId: TEST_SERVICE_ID,
       startsAt: startDate,
-      endsAt: endDate,
       conversationId,
     });
 
@@ -191,7 +183,7 @@ describe("bookAppointment", () => {
     const appointments = await db
       .select()
       .from(schema.appointments)
-      .where(eq(schema.appointments.id, result.appointmentId!));
+      .where(eq(schema.appointments.id, result.data!.appointmentId!));
 
     expect(appointments[0]!.conversationId).toBe(conversationId);
   });
@@ -202,11 +194,10 @@ describe("bookAppointment", () => {
       customerId: "nonexistent-customer",
       serviceId: TEST_SERVICE_ID,
       startsAt: new Date("2026-06-15T14:00:00Z"),
-      endsAt: new Date("2026-06-15T15:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Customer not found");
+    expect(result.message).toBe("Customer not found");
   });
 
   it("returns error when service not found", async () => {
@@ -215,11 +206,10 @@ describe("bookAppointment", () => {
       customerId: TEST_CUSTOMER_ID,
       serviceId: "nonexistent-service",
       startsAt: new Date("2026-06-15T14:00:00Z"),
-      endsAt: new Date("2026-06-15T15:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Service not found");
+    expect(result.message).toBe("Service not found");
   });
 
   it("returns error when customer belongs to different tenant", async () => {
@@ -248,11 +238,10 @@ describe("bookAppointment", () => {
       customerId: otherCustomerRows[0]!.id,
       serviceId: TEST_SERVICE_ID,
       startsAt: new Date("2026-06-15T14:00:00Z"),
-      endsAt: new Date("2026-06-15T15:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Customer not found");
+    expect(result.message).toBe("Customer not found");
 
     // Clean up
     await db.delete(schema.tenants).where(eq(schema.tenants.id, otherTenantId));
@@ -285,11 +274,10 @@ describe("bookAppointment", () => {
       customerId: TEST_CUSTOMER_ID,
       serviceId: otherServiceRows[0]!.id,
       startsAt: new Date("2026-06-15T14:00:00Z"),
-      endsAt: new Date("2026-06-15T15:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Service not found");
+    expect(result.message).toBe("Service not found");
 
     // Clean up
     await db.delete(schema.tenants).where(eq(schema.tenants.id, otherTenantId));
@@ -299,18 +287,16 @@ describe("bookAppointment", () => {
     vi.mocked(getCalendarAdapter).mockResolvedValue(null);
 
     const startDate = new Date("2026-06-15T14:00:00Z");
-    const endDate = new Date("2026-06-15T15:00:00Z");
 
     const result = await bookAppointment({
       tenantId: TEST_TENANT_ID,
       customerId: TEST_CUSTOMER_ID,
       serviceId: TEST_SERVICE_ID,
       startsAt: startDate,
-      endsAt: endDate,
     });
 
     // Should still succeed in creating the appointment
     expect(result.success).toBe(true);
-    expect(result.appointmentId).toBeDefined();
+    expect(result.data?.appointmentId).toBeDefined();
   });
 });

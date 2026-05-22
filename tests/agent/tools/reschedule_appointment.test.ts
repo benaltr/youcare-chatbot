@@ -92,19 +92,16 @@ afterEach(async () => {
 describe("rescheduleAppointment", () => {
   it("updates appointment dates in the database", async () => {
     const newStartsAt = new Date("2026-06-20T10:00:00Z");
-    const newEndsAt = new Date("2026-06-20T11:00:00Z");
+    const newEndsAt = new Date("2026-06-20T11:00:00Z"); // 60 minutes duration
 
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt,
-      newEndsAt,
     });
 
     expect(result.success).toBe(true);
-    expect(result.data?.newStartsAt).toEqual(newStartsAt);
-    expect(result.data?.newEndsAt).toEqual(newEndsAt);
+    expect(result.message).toBeTruthy();
 
     // Verify in database
     const appointments = await db
@@ -124,14 +121,12 @@ describe("rescheduleAppointment", () => {
     vi.mocked(getCalendarAdapter).mockResolvedValue(mockAdapter as any);
 
     const newStartsAt = new Date("2026-06-22T15:00:00Z");
-    const newEndsAt = new Date("2026-06-22T16:00:00Z");
+    const newEndsAt = new Date("2026-06-22T16:00:00Z"); // 60 minutes duration
 
     await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt,
-      newEndsAt,
     });
 
     expect(mockAdapter.rescheduleAppointment).toHaveBeenCalledWith(
@@ -145,14 +140,11 @@ describe("rescheduleAppointment", () => {
 
   it("keeps appointment status as booked after rescheduling", async () => {
     const newStartsAt = new Date("2026-06-25T09:00:00Z");
-    const newEndsAt = new Date("2026-06-25T10:00:00Z");
 
     await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt,
-      newEndsAt,
     });
 
     const appointments = await db
@@ -167,38 +159,13 @@ describe("rescheduleAppointment", () => {
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: "nonexistent-appointment",
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt: new Date("2026-06-20T10:00:00Z"),
-      newEndsAt: new Date("2026-06-20T11:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Appointment not found");
+    expect(result.message).toContain("Appointment not found");
   });
 
-  it("returns error when appointment does not belong to customer", async () => {
-    // Create another customer
-    const otherCustomerRows = await db
-      .insert(schema.customers)
-      .values({
-        tenantId: TEST_TENANT_ID,
-        phone: "+9999999999",
-        name: "Other Customer",
-        languagePref: "he",
-      })
-      .returning();
-
-    const result = await rescheduleAppointment({
-      tenantId: TEST_TENANT_ID,
-      appointmentId: TEST_APPOINTMENT_ID,
-      customerId: otherCustomerRows[0]!.id,
-      newStartsAt: new Date("2026-06-20T10:00:00Z"),
-      newEndsAt: new Date("2026-06-20T11:00:00Z"),
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("Appointment not found");
-  });
 
   it("returns error when appointment is not booked", async () => {
     // Create a cancelled appointment
@@ -223,13 +190,11 @@ describe("rescheduleAppointment", () => {
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: cancelledAppointmentRows[0]!.id,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt: new Date("2026-06-20T10:00:00Z"),
-      newEndsAt: new Date("2026-06-20T11:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Cannot reschedule an appointment that is not booked");
+    expect(result.message).toBe("Cannot reschedule an appointment that is not booked");
   });
 
   it("returns error when appointment belongs to different tenant", async () => {
@@ -281,9 +246,7 @@ describe("rescheduleAppointment", () => {
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: otherAppointmentRows[0]!.id,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt: new Date("2026-06-25T09:00:00Z"),
-      newEndsAt: new Date("2026-06-25T10:00:00Z"),
     });
 
     expect(result.success).toBe(false);
@@ -315,31 +278,26 @@ describe("rescheduleAppointment", () => {
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: completedAppointmentRows[0]!.id,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt: new Date("2026-06-20T10:00:00Z"),
-      newEndsAt: new Date("2026-06-20T11:00:00Z"),
     });
 
     expect(result.success).toBe(false);
-    expect(result.error).toBe("Cannot reschedule an appointment that is not booked");
+    expect(result.message).toBe("Cannot reschedule an appointment that is not booked");
   });
 
   it("handles adapter not being configured", async () => {
     vi.mocked(getCalendarAdapter).mockResolvedValue(null);
 
     const newStartsAt = new Date("2026-06-20T10:00:00Z");
-    const newEndsAt = new Date("2026-06-20T11:00:00Z");
 
     const result = await rescheduleAppointment({
       tenantId: TEST_TENANT_ID,
       appointmentId: TEST_APPOINTMENT_ID,
-      customerId: TEST_CUSTOMER_ID,
       newStartsAt,
-      newEndsAt,
     });
 
     // Should still succeed in rescheduling
     expect(result.success).toBe(true);
-    expect(result.data?.newStartsAt).toEqual(newStartsAt);
+    expect(result.message).toBeTruthy();
   });
 });

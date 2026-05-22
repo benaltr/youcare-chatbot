@@ -8,31 +8,31 @@ import { db, schema } from "@/lib/db";
 
 export interface GetClinicInfoInput {
   tenantId: string;
+  field?: "hours" | "services" | "contact" | "all";
 }
 
 export interface GetClinicInfoResult {
   success: boolean;
+  message: string;
   data?: {
-    name: string;
-    phone?: string;
-    businessHours?: Record<string, { open: string; close: string }>;
-    services: Array<{
+    hours?: Record<string, { open: string; close: string }>;
+    services?: Array<{
       id: string;
       name: string;
       durationMinutes: number;
       priceCents: number | null;
       category?: string;
     }>;
-    staff: Array<{
-      id: string;
+    contact?: {
       name: string;
-      qualifications?: string[];
-    }>;
+      phone?: string;
+    };
   };
-  error?: string;
 }
 
 export async function getClinicInfo(input: GetClinicInfoInput): Promise<GetClinicInfoResult> {
+  const field = input.field || "all";
+
   try {
     // Get tenant info
     const tenantRows = await db
@@ -45,55 +45,59 @@ export async function getClinicInfo(input: GetClinicInfoInput): Promise<GetClini
     if (!tenant) {
       return {
         success: false,
-        error: "Clinic not found",
+        message: "Clinic not found",
       };
     }
 
-    // Get tenant config (hours, contact)
-    const configRows = await db
-      .select()
-      .from(schema.tenantConfigs)
-      .where(eq(schema.tenantConfigs.tenantId, input.tenantId))
-      .limit(1);
+    const data: GetClinicInfoResult["data"] = {};
 
-    const config = configRows[0];
+    // Get hours if requested
+    if (field === "hours" || field === "all") {
+      const configRows = await db
+        .select()
+        .from(schema.tenantConfigs)
+        .where(eq(schema.tenantConfigs.tenantId, input.tenantId))
+        .limit(1);
 
-    // Get all active services for this tenant
-    const services = await db
-      .select()
-      .from(schema.services)
-      .where(eq(schema.services.tenantId, input.tenantId));
+      const config = configRows[0];
+      if (config?.businessHours) {
+        data.hours = config.businessHours;
+      }
+    }
 
-    // Get all active staff for this tenant
-    const staffList = await db
-      .select()
-      .from(schema.staff)
-      .where(eq(schema.staff.tenantId, input.tenantId));
+    // Get services if requested
+    if (field === "services" || field === "all") {
+      const services = await db
+        .select()
+        .from(schema.services)
+        .where(eq(schema.services.tenantId, input.tenantId));
+
+      data.services = services.map((s) => ({
+        id: s.id,
+        name: s.name,
+        durationMinutes: s.durationMinutes,
+        priceCents: s.priceCents,
+        category: s.category || undefined,
+      }));
+    }
+
+    // Get contact if requested
+    if (field === "contact" || field === "all") {
+      data.contact = {
+        name: tenant.name,
+        phone: tenant.whatsappNumber || undefined,
+      };
+    }
 
     return {
       success: true,
-      data: {
-        name: tenant.name,
-        phone: tenant.whatsappNumber,
-        businessHours: config?.businessHours || undefined,
-        services: services.map((s) => ({
-          id: s.id,
-          name: s.name,
-          durationMinutes: s.durationMinutes,
-          priceCents: s.priceCents,
-          category: s.category,
-        })),
-        staff: staffList.map((st) => ({
-          id: st.id,
-          name: st.name,
-          qualifications: st.qualifications,
-        })),
-      },
+      message: "Clinic information retrieved",
+      data: Object.keys(data).length > 0 ? data : undefined,
     };
   } catch (error) {
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Failed to get clinic info",
+      message: error instanceof Error ? error.message : "Failed to get clinic info",
     };
   }
 }
